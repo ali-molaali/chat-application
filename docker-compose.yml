@@ -1,0 +1,30 @@
+# Local development infrastructure. Start with: docker compose up -d
+services:
+  # PostgreSQL: stores users, chat rooms and message history
+  postgres:
+    image: postgres:16-alpine
+    container_name: chat-postgres
+    environment:
+      POSTGRES_DB: chat_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chat_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Kafka: single broker in KRaft mode (no ZooKeeper needed).
+  # The image's default config advertises localhost:9092, which is what the app uses.
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: chat-kafka
+    ports:
+      - "9092:9092"
+
+volumes:
+  postgres-data:

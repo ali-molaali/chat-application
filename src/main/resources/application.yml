@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: chat-application
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chat_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      bootstrap-servers: localhost:9092
+      group-id: chat-app-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
+
+  # Security
+  security:
+    oauth2:
+      jwt:
+        secret: your-secret-key-here-change-in-production-minimum-256-bits
+        expiration: 86400000 # 24 hours in milliseconds
+
+  # Jackson configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: true
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.messagingapp: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.kafka: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Actuator (Monitoring) Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus
+  endpoint:
+    health:
+      show-details: always
