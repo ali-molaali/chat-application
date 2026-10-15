@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-10-06
+Last updated: 2026-10-14
 
 This file tracks where the project is: what is finished, what we are working on now, and what comes next. It is updated after every step.
 
@@ -12,10 +12,11 @@ Build a complete real-time chat application with Spring Boot, Apache Kafka and A
 
 | | |
 |---|---|
-| Finished | Step 1 (local setup) and step 2a (`users` table and `User` entity) |
-| Working on | Step 2: the first feature, user registration |
-| Next small step | Step 2b: `UserRepository` |
-| Git | Local repository on branch `main`. Every finished step is committed and pushed to GitHub. |
+| Finished | Step 1 (local setup), steps 2a to 2c (`User` entity, `UserRepository`, `UserService`) |
+| Working on | Step 2: user registration |
+| Build state | The application starts (verified 2026-10-14). |
+| Next small step | Step 2d: request and response DTOs with validation |
+| Git | Repository: https://github.com/ali-molaali/chat-application, branch `main`. Every finished step is committed and pushed. |
 
 ## What we did
 
@@ -40,9 +41,37 @@ Not verified: the application does not talk to Kafka yet, because no code produc
 ### Step 2a: `users` table and `User` entity
 
 - **`src/main/resources/db/migration/V1__create_users_table.sql` created.** It creates the `users` table with the columns `id`, `username`, `email`, `password_hash` and `created_at`. `username` and `email` are unique.
-- **`src/main/java/com/messagingapp/user/User.java` created.** It is the JPA entity mapped to the `users` table.
+- **`User.java` created.** It is the JPA entity mapped to the `users` table. It was first in a `user` package and moved to `entity` in step 2b.
 
 Verified: Flyway applied migration version 1, Hibernate validation passed, and the application started. The table was checked directly in PostgreSQL.
+
+### Step 2b: `UserRepository`
+
+- **`src/main/java/com/messagingapp/repository/UserRepository.java` created.** It extends `JpaRepository<User, Long>` and adds `findByUsername`, `existsByUsername` and `existsByEmail`.
+- **Package layout changed to layers.** The code is now organised as `entity`, `repository`, `service`, `service/impl`, `config`, `controller`, `dto` and so on, instead of one package per feature.
+
+- **`User` moved to `entity/User.java`.** The old `user/User.java` was deleted, because two entities with the same name stop Hibernate from starting.
+
+### Step 2c: `UserService`
+
+- **`config/PasswordConfig.java` created.** A `@Configuration` class with a `@Bean` method that gives Spring one `BCryptPasswordEncoder`.
+- **`service/UserService.java` created.** An interface with one method: `register(username, email, rawPassword)`.
+- **`service/impl/UserServiceImpl.java` created.** It rejects a username or email that already exists, hashes the password with BCrypt, and saves the user. The repository and the password encoder are injected through the constructor.
+
+Verified: the application starts, which proves Spring could create the repository and the service and inject their dependencies. Registration itself is tested once the endpoint exists (step 2e).
+
+Problems met on the way, and their fixes:
+
+- Edits in VS Code were not saved before committing, so empty files were pushed. Fix: turn on **File > Auto Save** and run `git status` before every commit.
+- Auto-import picked `@Configurable` instead of `@Configuration`. Fix: check the package of an import before accepting it.
+- `mvn spring-boot run` failed. The goal needs a colon: `mvn spring-boot:run`.
+- "release version 21 not supported": Maven ran on JDK 17. Fix: `setx JAVA_HOME "C:\Program Files\Java\jdk-21.0.10"` and open a new terminal.
+- "Connection to localhost:5432 refused": the containers were stopped. Fix: start Docker Desktop and run `docker compose up -d` before the app.
+
+### Git and GitHub
+
+- Local repository initialised on branch `main` and connected to GitHub.
+- Every step is one commit, pushed to GitHub.
 
 ### Documentation
 
@@ -57,6 +86,16 @@ Verified: Flyway applied migration version 1, Hibernate validation passed, and t
 - **`ddl-auto: validate`** means Hibernate does not create or change tables. It only checks at startup that each entity matches its table. Flyway owns the schema and Hibernate verifies it.
 - **Lombok** generates getters, setters and constructors at compile time from annotations such as `@Getter` and `@Setter`.
 - **Passwords** are never stored. Only a hash is stored, which is why the column is called `password_hash`.
+- **A Spring Data repository** is only an interface. Spring generates the implementation at startup and builds the SQL from method names such as `findByUsername`.
+- **`Optional<User>`** is returned when a result may be missing. If no user is found it is an empty Optional, never `null`. It is opened with `orElseThrow`, `isPresent` or `ifPresent`.
+- **`docker compose up -d`** starts the containers from `docker-compose.yml` in the background.
+- **Git basics:** `git status` shows what will be committed, `git add` selects files, `git commit` records them, and `git push` uploads to GitHub. Running `git status` before every commit catches unsaved or missing files.
+- **The three layers:** the controller receives HTTP requests, the service holds the business rules, and the repository talks to the database.
+- **Beans and dependency injection:** Spring creates and manages objects (beans). A class declares what it needs as `private final` fields, Lombok's `@RequiredArgsConstructor` generates the constructor, and Spring passes the beans in. `@Service` and `@Configuration` with `@Bean` are two ways to create beans.
+- **BCrypt** is a one-way, deliberately slow hash made for passwords.
+- **`@Transactional`** runs a method as one database transaction: if it throws, nothing is saved.
+- **Maven phases and goals:** a word like `package` is a phase; `plugin:goal` such as `spring-boot:run` runs a plugin goal.
+- **Reading a stack trace:** the last `Caused by` line is the real cause.
 
 ## What we are doing now
 
@@ -65,9 +104,9 @@ Step 2 is the first real feature: a client can register a user. It is split into
 | Part | What | Status |
 |---|---|---|
 | 2a | `users` table and `User` entity | Done |
-| 2b | `UserRepository`: save and find users without writing SQL | Next |
-| 2c | `UserService`: registration logic, password hashing with BCrypt, duplicate checks | To do |
-| 2d | Request and response DTOs with validation | To do |
+| 2b | `UserRepository`: save and find users without writing SQL | Done |
+| 2c | `UserService`: registration logic, password hashing with BCrypt, duplicate checks | Done |
+| 2d | Request and response DTOs with validation | Next |
 | 2e | `UserController`: `POST /api/users/register` | To do |
 | 2f | Security configuration so the register endpoint is reachable without login | To do |
 | 2g | Error handling: clear JSON errors for invalid input and duplicates | To do |

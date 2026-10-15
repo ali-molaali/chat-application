@@ -1,5 +1,9 @@
-package com.messagingapp.service.impl;
+package com.messagingapp.service;
 
-public class UserService {
+import com.messagingapp.entity.User;
+
+public interface UserService {
+
+    User register(String username, String email, String rawPassword);
 
 }
