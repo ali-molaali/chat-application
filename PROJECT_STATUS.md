@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 This file tracks where the project is: what is finished, what we are working on now, and what comes next. It is updated after every step.
 
@@ -12,10 +12,10 @@ Build a complete real-time chat application with Spring Boot, Apache Kafka and A
 
 | | |
 |---|---|
-| Finished | Step 1 (local setup), steps 2a to 2c (`User` entity, `UserRepository`, `UserService`) |
+| Finished | Step 1 (local setup), steps 2a to 2d (`User` entity, `UserRepository`, `UserService`, DTOs) |
 | Working on | Step 2: user registration |
 | Build state | The application starts (verified 2026-10-14). |
-| Next small step | Step 2d: request and response DTOs with validation |
+| Next small step | Step 2e: `UserController` with `POST /api/users/register` |
 | Git | Repository: https://github.com/ali-molaali/chat-application, branch `main`. Every finished step is committed and pushed. |
 
 ## What we did
@@ -68,6 +68,15 @@ Problems met on the way, and their fixes:
 - "release version 21 not supported": Maven ran on JDK 17. Fix: `setx JAVA_HOME "C:\Program Files\Java\jdk-21.0.10"` and open a new terminal.
 - "Connection to localhost:5432 refused": the containers were stopped. Fix: start Docker Desktop and run `docker compose up -d` before the app.
 
+### Step 2d: request and response DTOs
+
+- **`dto/RegisterRequest.java` created.** A record with `username`, `email` and `password`, and validation rules: username 3 to 50 characters (letters, digits and `_` only), a valid email, and a password of 8 to 72 characters.
+- **`dto/UserResponse.java` created.** A record with `id`, `username`, `email` and `createdAt`, and a `from(User)` method that converts an entity into a response. It has no password field, so the hash can never be sent to a client.
+
+Verified: both files compile. The validation rules take effect in step 2e, when the controller marks the request with `@Valid`.
+
+Problem met on the way: the files were committed twice as empty skeletons before the code was saved. The check that catches this is `git diff --staged`, which shows the content that will be committed.
+
 ### Git and GitHub
 
 - Local repository initialised on branch `main` and connected to GitHub.
@@ -96,6 +105,10 @@ Problems met on the way, and their fixes:
 - **`@Transactional`** runs a method as one database transaction: if it throws, nothing is saved.
 - **Maven phases and goals:** a word like `package` is a phase; `plugin:goal` such as `spring-boot:run` runs a plugin goal.
 - **Reading a stack trace:** the last `Caused by` line is the real cause.
+- **DTOs** describe exactly what an endpoint accepts and returns. They keep internal fields such as `passwordHash` out of the API and stop clients from setting fields such as `id`.
+- **Java records** are short classes that only hold data. Java generates the constructor, accessors, `equals` and `toString`.
+- **Bean Validation** annotations such as `@NotBlank`, `@Size`, `@Email` and `@Pattern` describe rules for input. Spring checks them when the parameter is marked `@Valid`.
+- **Staged vs not staged:** only staged changes go into a commit. `git status --short` shows staged changes with the letter on the left. `git diff --staged` shows their content.
 
 ## What we are doing now
 
@@ -106,8 +119,8 @@ Step 2 is the first real feature: a client can register a user. It is split into
 | 2a | `users` table and `User` entity | Done |
 | 2b | `UserRepository`: save and find users without writing SQL | Done |
 | 2c | `UserService`: registration logic, password hashing with BCrypt, duplicate checks | Done |
-| 2d | Request and response DTOs with validation | Next |
-| 2e | `UserController`: `POST /api/users/register` | To do |
+| 2d | Request and response DTOs with validation | Done |
+| 2e | `UserController`: `POST /api/users/register` | Next |
 | 2f | Security configuration so the register endpoint is reachable without login | To do |
 | 2g | Error handling: clear JSON errors for invalid input and duplicates | To do |
 | 2h | Test the endpoint by hand, then with an automated test | To do |
