@@ -1,6 +1,7 @@
 package com.messagingapp.service.impl;
 
 import com.messagingapp.entity.User;
+import com.messagingapp.exception.UserAlreadyExistsException;
 import com.messagingapp.repository.UserRepository;
 import com.messagingapp.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -18,13 +19,13 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public User register(String username, String email, String rawPassword) {
-        if (userRepository.existsByUsername(username)) {
-            throw new IllegalArgumentException("Username is already taken");
+   
+   if (userRepository.existsByUsername(username)) {
+            throw new UserAlreadyExistsException("Username is already taken");
         }
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("Email is already registered");
+            throw new UserAlreadyExistsException("Email is already registered");
         }
-
         User user = new User();
         user.setUsername(username);
         user.setEmail(email);
