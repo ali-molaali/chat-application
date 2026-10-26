@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-10-15
+Last updated: 2026-10-26
 
 This file tracks where the project is: what is finished, what we are working on now, and what comes next. It is updated after every step.
 
@@ -12,10 +12,10 @@ Build a complete real-time chat application with Spring Boot, Apache Kafka and A
 
 | | |
 |---|---|
-| Finished | Step 1 (local setup), steps 2a to 2d (`User` entity, `UserRepository`, `UserService`, DTOs) |
-| Working on | Step 2: user registration |
-| Build state | The application starts (verified 2026-10-14). |
-| Next small step | Step 2e: `UserController` with `POST /api/users/register` |
+| Finished | Steps 1 and 2a to 2h; Kafka console exercise; event, DTO, producer, message service and controller implemented |
+| Working on | Step 3: Kafka. The REST producer is written; live HTTP-to-Kafka verification is next. |
+| Build state | `mvn test` passed on JDK 21 on 2026-10-26: all 18 main source files compiled and all 3 existing registration tests passed. Latest full application startup has not been reverified. |
+| Next small step | Start the app, send `POST /api/messages` with an existing user ID, and observe the JSON in the console consumer |
 | Git | Repository: https://github.com/ali-molaali/chat-application, branch `main`. Every finished step is committed and pushed. |
 
 ## What we did
@@ -77,6 +77,54 @@ Verified: both files compile. The validation rules take effect in step 2e, when 
 
 Problem met on the way: the files were committed twice as empty skeletons before the code was saved. The check that catches this is `git diff --staged`, which shows the content that will be committed.
 
+### Step 2e: `UserController`
+
+- **`controller/UserController.java` created.** `POST /api/users/register` takes a `RegisterRequest` as JSON (`@RequestBody`), validates it (`@Valid`), calls `UserService.register`, and returns a `UserResponse` with status `201 Created`.
+
+Tested in step 2f, once the endpoint was opened.
+
+Problems met on the way:
+
+- VS Code showed "variable userService not initialized in the default constructor" and "Flexible Constructor Bodies is only available with source level 25". This is a false error from the editor's built-in Lombok, not a real problem: `mvn compile` succeeds. Writing the constructor by hand removes the red line, if it gets in the way.
+- Java autocomplete and auto-import did not work. Fix: install Extension Pack for Java, set `java.configuration.runtimes` to JDK 21, and run **Java: Clean Java Language Server Workspace**. Do not set `java.jdt.ls.java.home` to JDK 21, because the extension itself needs Java 25 and brings its own.
+- The "Kilo Code Autocomplete has been paused" message is from a separate AI extension and is not related to Java autocomplete.
+
+### Step 2f: security configuration
+
+- **`config/SecurityConfig.java` created.** A `SecurityFilterChain` bean: CSRF off, stateless sessions, `POST /users/register`, `/actuator/health` and `/error` open to everyone, and every other endpoint requires authentication.
+
+Verified: the first real user was registered with `Invoke-RestMethod` and checked in PostgreSQL. The password is stored as a BCrypt hash. At that point registering the same user twice returned `500`; step 2g fixed it.
+
+### Step 2g: error handling
+
+- **`exception/UserAlreadyExistsException.java` created.** Our own exception for a username or email that is already registered.
+- **`exception/GlobalExceptionHandler.java` created.** A `@RestControllerAdvice` that turns `UserAlreadyExistsException` into `409 Conflict` and validation failures into `400 Bad Request` with an `errors` map per field. Both use `ProblemDetail`, the standard JSON error format (RFC 9457).
+- **`UserServiceImpl` changed** to throw `UserAlreadyExistsException` instead of `IllegalArgumentException`.
+
+Verified: a duplicate registration returns `409` instead of `500`.
+
+### Step 2h: first unit tests
+
+- **`src/test/java/com/messagingapp/service/impl/UserServiceImplTest.java` created.** Three Mockito unit tests for `UserServiceImpl`: a new user is saved with a hashed password, a taken username is rejected, and a taken email is rejected. The two rejection tests also check that nothing is saved.
+
+Verified: `mvn test` runs without Docker or a running app.
+
+### Step 3: Kafka producer checkpoint
+
+- **Infrastructure:** Windows excludes ports 9081-9180, including 9092. Kafka now listens and advertises `localhost:19092`; both Spring bootstrap-server settings match it. Explicit KRaft node, controller, listener protocol and single-broker replication settings fixed the startup failure.
+- **Topic:** `chat-messages` created with one partition and replication factor 1. The learner verified console publishing, consuming and rereading retained records.
+- **`event/ChatMessageEvent.java`:** record containing `eventId`, `senderId`, `roomId`, `text` and `sentAt`.
+- **`dto/SendMessageRequest.java`:** validates a positive sender ID and nonblank, length-limited room and message text.
+- **`service/ChatMessageProducer.java`:** sends JSON events with `KafkaTemplate`, using the room ID as the record key; returns the send future.
+- **`service/ChatMessageService.java`:** checks the sender exists, generates a UUID and timestamp, and returns the event after the Kafka send succeeds.
+- **`exception/UserNotFoundException.java`:** mapped to a `404` ProblemDetail by the existing global handler.
+- **`controller/ChatMessageController.java`:** `POST /api/messages`, validation and asynchronous `202 Accepted` response after Kafka acknowledgement.
+- **Security:** message POST temporarily public for local testing; async dispatch permitted so Spring can complete the future-based response.
+
+Verification: console Kafka flow confirmed by the learner. On 2026-10-26, `mvn test` passed on JDK 21: 18 main source files compiled; 3 existing registration tests passed with no failures or errors. These tests do not cover message publishing. Live REST publishing, error responses and application startup with the new beans are still to be tested. There is no Java consumer or messages table yet.
+
+Learning mode: the assistant explains and reviews; the learner writes the application code and runs the lesson exercises. Documentation maintenance and this Git checkpoint were explicitly delegated to the assistant.
+
 ### Git and GitHub
 
 - Local repository initialised on branch `main` and connected to GitHub.
@@ -108,11 +156,25 @@ Problem met on the way: the files were committed twice as empty skeletons before
 - **DTOs** describe exactly what an endpoint accepts and returns. They keep internal fields such as `passwordHash` out of the API and stop clients from setting fields such as `id`.
 - **Java records** are short classes that only hold data. Java generates the constructor, accessors, `equals` and `toString`.
 - **Bean Validation** annotations such as `@NotBlank`, `@Size`, `@Email` and `@Pattern` describe rules for input. Spring checks them when the parameter is marked `@Valid`.
+- **A REST controller** receives HTTP requests. `@RestController` turns return values into JSON, `@RequestMapping` and `@PostMapping` map URLs, `@RequestBody` reads the JSON body, and `@ResponseStatus` sets the status code.
+- **Constructor injection:** Spring passes a class's dependencies into its constructor. `@RequiredArgsConstructor` writes that constructor; it can also be written by hand.
+- **Spring Security filter chain:** every request passes security filters before reaching a controller. `permitAll()` opens a path and `authenticated()` requires login. Rules are checked top to bottom, so `anyRequest()` comes last. Paths are written without the `/api` context path.
+- **CSRF** protects cookie-based logins. A token-based REST API turns it off.
+- **`/error` must be open,** because Spring forwards there to build error responses.
+- **`Invoke-RestMethod`** is PowerShell's command for calling a REST API.
+- **Unit tests with Mockito:** `@Mock` creates fake dependencies, `@InjectMocks` builds the class under test with them, `when(...).thenReturn(...)` sets their answers, and `verify(...)` checks how they were called. Each test follows arrange, act, assert.
+- **Test code** lives in `src/test/java`, in the same package as the class it tests, and is never part of the application. `mvn test` runs it.
+- **HTTP status codes used so far:** `201 Created` for a new resource, `400 Bad Request` for invalid input, `401`/`403` for blocked access, `409 Conflict` for a duplicate, and `500` for a server bug.
+- **`@RestControllerAdvice` with `@ExceptionHandler`** handles exceptions from all controllers in one place.
+- **`ProblemDetail`** is Spring's class for the standard error format with `type`, `title`, `status` and `detail`.
+- **`curl.exe -i` with `--data-binary "@body.json"`** shows the full response including an error body, and avoids JSON quoting problems in PowerShell.
+- **The git pager:** long output opens in a viewer; `q` quits it.
+- **VS Code shortcuts:** `Ctrl+Space` shows suggestions, `Ctrl+.` fixes the problem under the cursor (for example a missing import), `Shift+Alt+O` organises imports, and `Shift+Alt+F` formats the file.
 - **Staged vs not staged:** only staged changes go into a commit. `git status --short` shows staged changes with the letter on the left. `git diff --staged` shows their content.
 
 ## What we are doing now
 
-Step 2 is the first real feature: a client can register a user. It is split into small parts.
+Step 2 (registration) is complete. Its parts are recorded below; current work is the step 3 Kafka producer checkpoint described above.
 
 | Part | What | Status |
 |---|---|---|
@@ -120,18 +182,18 @@ Step 2 is the first real feature: a client can register a user. It is split into
 | 2b | `UserRepository`: save and find users without writing SQL | Done |
 | 2c | `UserService`: registration logic, password hashing with BCrypt, duplicate checks | Done |
 | 2d | Request and response DTOs with validation | Done |
-| 2e | `UserController`: `POST /api/users/register` | Next |
-| 2f | Security configuration so the register endpoint is reachable without login | To do |
-| 2g | Error handling: clear JSON errors for invalid input and duplicates | To do |
-| 2h | Test the endpoint by hand, then with an automated test | To do |
+| 2e | `UserController`: `POST /api/users/register` | Done |
+| 2f | Security configuration so the register endpoint is reachable without login | Done |
+| 2g | Error handling: clear JSON errors for invalid input and duplicates | Done |
+| 2h | Test the endpoint by hand, then with an automated test | Done |
 
 ## What we should do next
 
 ### Step 3: Kafka
 
-- Create a `chat-messages` topic.
-- Define the message event (sender, room, text, time).
-- Write a producer: a REST endpoint receives a message and publishes it to the topic.
+- Completed: create a `chat-messages` topic and verify console publishing/consuming.
+- Implemented: message event, validated request, producer service and REST endpoint.
+- Next: verify HTTP publishing and the `202`, `400` and `404` responses manually.
 - Write a consumer: it reads from the topic and saves the message in PostgreSQL.
 - Add a `messages` table with a `V2__` migration.
 - Learn the Kafka basics on the way: topics, partitions, keys, consumer groups and offsets.
@@ -176,7 +238,8 @@ Step 2 is the first real feature: a client can register a user. It is split into
   ```
 
 - **The JWT settings in `application.yml` are placeholders.** `spring.security.oauth2.jwt.secret` is not a real Spring property and contains a dummy secret. It is replaced in step 5.
-- **All endpoints except health are locked.** Spring Security is on the classpath with no configuration, so it protects everything with a generated password. This is fixed in step 2f.
+- **Message sender identity is not authenticated yet.** Registration and message POST endpoints are public for local development. Checking that `senderId` exists does not prove the caller owns that account; JWT authentication is planned in step 5.
+- **Kafka data is not persisted in a Docker volume.** Recreating its container can remove topics and records. Recreate `chat-messages` using the README command if necessary.
 - **Kafka JSON trusted packages is `"*"`.** It is fine for local work and is narrowed to our own package in step 3.
 - **The `prometheus` actuator endpoint is listed but not active.** It needs the `micrometer-registry-prometheus` dependency.
 - **The project URL in `pom.xml` is a placeholder** (`yourusername`). It is set when the GitHub repository exists.
@@ -199,5 +262,5 @@ curl http://localhost:8080/api/actuator/health
 docker exec -it chat-postgres psql -U postgres -d chat_db -c "\d users"
 
 # List Kafka topics
-docker exec chat-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+docker exec chat-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
 ```

@@ -6,6 +6,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import jakarta.servlet.DispatcherType;
 
 @Configuration
 public class SecurityConfig {
@@ -16,10 +17,15 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/users/register").permitAll()
-                        .requestMatchers("/actuator/health", "/error").permitAll()
-                        .anyRequest().authenticated()
-                );
+        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
+        .requestMatchers(
+                HttpMethod.POST,
+                "/users/register",
+                "/messages"
+        ).permitAll()
+        .requestMatchers("/actuator/health", "/error").permitAll()
+        .anyRequest().authenticated()
+);
         return http.build();
     }
 }
