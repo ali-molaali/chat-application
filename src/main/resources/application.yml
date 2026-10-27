@@ -33,7 +33,7 @@ spring:
         spring:
           json:
             trusted:
-              packages: "*"
+              packages: "com.messagingapp.event"
 
   # Security
   security:
