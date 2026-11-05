@@ -1,6 +1,14 @@
 # Project Status
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
+
+## Session working rule
+
+Future sessions must teach and explain only. Do not edit code, run commands, or use Git/GitHub unless the learner explicitly requests that action.
+
+## Frontend learning direction
+
+The frontend will use React with TypeScript instead of the temporary static HTML page. TypeScript will be taught inside this chat project in short, practical steps: components, props, state, event types, API response types and WebSocket message types. Explanations should stay brief and focus on the code currently being built.
 
 This file tracks where the project is: what is finished, what we are working on now, and what comes next. It is updated after every step.
 
@@ -12,11 +20,11 @@ Build a complete real-time chat application with Spring Boot, Apache Kafka and A
 
 | | |
 |---|---|
-| Finished | Steps 1 and 2a to 2h; Kafka console exercise; event, DTO, producer, message service and controller implemented |
-| Working on | Step 3: Kafka. The REST producer is written; live HTTP-to-Kafka verification is next. |
-| Build state | `mvn test` passed on JDK 21 on 2026-10-26: all 18 main source files compiled and all 3 existing registration tests passed. Latest full application startup has not been reverified. |
-| Next small step | Start the app, send `POST /api/messages` with an existing user ID, and observe the JSON in the console consumer |
-| Git | Repository: https://github.com/ali-molaali/chat-application, branch `main`. Every finished step is committed and pushed. |
+| Finished | Steps 1 and 2a to 2h; Kafka console exercise; REST producer, Java consumer, message entity/repository, persistence service and V2 migration implemented |
+| Working on | Step 4: WebSocket. Initial STOMP configuration drafted; explanation given in Farsi. Paused for today. |
+| Build state | Learner reported 5 tests passing with no failures, errors or skips on 2026-10-27: 3 registration tests and 2 persistence tests. The WebSocket draft has no `.java` extension, so Maven does not compile it yet. |
+| Next small step | Rename `config/WebSocketConfig` to `WebSocketConfig.java`, review and compile it, then permit the handshake in Spring Security and connect the Kafka consumer to room destinations. |
+| Git | Repository: https://github.com/ali-molaali/chat-application, branch `main`. Today's changes are in the working tree; commit and push are pending. |
 
 ## What we did
 
@@ -125,6 +133,27 @@ Verification: console Kafka flow confirmed by the learner. On 2026-10-26, `mvn t
 
 Learning mode: the assistant explains and reviews; the learner writes the application code and runs the lesson exercises. Documentation maintenance and this Git checkpoint were explicitly delegated to the assistant.
 
+### Step 3: consumer and persistence checkpoint (2026-10-27)
+
+The working tree now also contains:
+
+- `entity/Message.java` and `repository/MessageRepository.java`: message mapping and lookup by event ID.
+- `V2__create_messages_table.sql`: message table with a unique event ID and sender foreign key.
+- `service/MessagePersistenceService.java`: transactional persistence; skips an event if its ID is already stored.
+- `service/ChatMessageConsumer.java`: Kafka listener that calls the persistence service.
+- Kafka JSON trusted packages narrowed to `com.messagingapp.event`.
+- `MessagePersistenceServiceTest`: verifies an already stored event is skipped and a new event is saved with all fields copied correctly, using `ArgumentCaptor` and AssertJ recursive comparison.
+
+Verification: the assistant initially ran 4 tests successfully on JDK 21. After adding the new-event test, the learner reported all 5 tests passing with no failures, errors or skips. Later, Docker was running and a database query confirmed V1 and V2 were applied and user `ali` had ID 1. The learner confirmed the live HTTP-to-Kafka-to-PostgreSQL exercise was OK; response and row output were not captured in this chat. Separate `400` and `404` checks remain unrecorded. The existence check handles sequential redelivery; it does not make simultaneous inserts of the same event atomic (the database unique constraint rejects the second insert).
+
+### Step 4: WebSocket draft (2026-10-27)
+
+- Created `src/main/java/com/messagingapp/config/WebSocketConfig` with STOMP enabled, a `/ws` endpoint and the simple broker prefix `/topic`.
+- Explained WebSocket, STOMP, connection addresses and room subscriptions in Farsi. The planned connection URL is `ws://localhost:8080/api/ws`; an example subscription destination is `/topic/rooms/general`.
+- The file currently lacks the `.java` extension and is not compiled. Review and rename it next session before treating this configuration as active.
+- Security access, Kafka-to-WebSocket forwarding and a browser client are not implemented yet. No live WebSocket verification has been performed.
+- Session ended at the learner's request; only documentation maintenance and Git commands were requested afterward.
+
 ### Git and GitHub
 
 - Local repository initialised on branch `main` and connected to GitHub.
@@ -171,10 +200,12 @@ Learning mode: the assistant explains and reviews; the learner writes the applic
 - **The git pager:** long output opens in a viewer; `q` quits it.
 - **VS Code shortcuts:** `Ctrl+Space` shows suggestions, `Ctrl+.` fixes the problem under the cursor (for example a missing import), `Shift+Alt+O` organises imports, and `Shift+Alt+F` formats the file.
 - **Staged vs not staged:** only staged changes go into a commit. `git status --short` shows staged changes with the letter on the left. `git diff --staged` shows their content.
+- **`ArgumentCaptor`** captures an object passed to a mocked dependency so its fields can be checked. AssertJ recursive comparison checks the saved message against the expected values.
+- **WebSocket and STOMP:** `/ws` is the connection endpoint; `/topic/rooms/general` is a subscription destination. The simple broker tracks subscribers in the running application.
 
 ## What we are doing now
 
-Step 2 (registration) is complete. Its parts are recorded below; current work is the step 3 Kafka producer checkpoint described above.
+Steps 2 and the Kafka persistence checkpoint are complete for this lesson. Current work is the initial step 4 WebSocket draft described above; the session is paused for today.
 
 | Part | What | Status |
 |---|---|---|
@@ -193,14 +224,15 @@ Step 2 (registration) is complete. Its parts are recorded below; current work is
 
 - Completed: create a `chat-messages` topic and verify console publishing/consuming.
 - Implemented: message event, validated request, producer service and REST endpoint.
-- Next: verify HTTP publishing and the `202`, `400` and `404` responses manually.
-- Write a consumer: it reads from the topic and saves the message in PostgreSQL.
-- Add a `messages` table with a `V2__` migration.
+- Implemented in the working tree: Java consumer, message persistence and the `V2__` messages table migration.
+- Learner confirmed the live publishing/persistence exercise was OK; separate `400` and `404` checks remain unrecorded.
+- Completed: unit tests for storing a new event and skipping a stored event; learner reported 5 total tests passing.
 - Learn the Kafka basics on the way: topics, partitions, keys, consumer groups and offsets.
 
 ### Step 4: WebSocket
 
-- Configure WebSocket with STOMP.
+- Next session: rename `config/WebSocketConfig` to `WebSocketConfig.java`, review it and run `mvn test` so the draft is compiled.
+- Permit the `/ws` handshake in Spring Security for local development.
 - The Kafka consumer pushes each message to the connected clients of that room.
 - Add a very small HTML page to see messages arrive live.
 
@@ -240,7 +272,7 @@ Step 2 (registration) is complete. Its parts are recorded below; current work is
 - **The JWT settings in `application.yml` are placeholders.** `spring.security.oauth2.jwt.secret` is not a real Spring property and contains a dummy secret. It is replaced in step 5.
 - **Message sender identity is not authenticated yet.** Registration and message POST endpoints are public for local development. Checking that `senderId` exists does not prove the caller owns that account; JWT authentication is planned in step 5.
 - **Kafka data is not persisted in a Docker volume.** Recreating its container can remove topics and records. Recreate `chat-messages` using the README command if necessary.
-- **Kafka JSON trusted packages is `"*"`.** It is fine for local work and is narrowed to our own package in step 3.
+- **Kafka JSON trusted packages** is now restricted to `com.messagingapp.event`.
 - **The `prometheus` actuator endpoint is listed but not active.** It needs the `micrometer-registry-prometheus` dependency.
 - **The project URL in `pom.xml` is a placeholder** (`yourusername`). It is set when the GitHub repository exists.
 - **Logging is very verbose.** Spring Web and Kafka are on `DEBUG` in `application.yml`.
