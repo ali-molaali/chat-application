@@ -23,7 +23,7 @@ public class SecurityConfig {
                 "/users/register",
                 "/messages"
         ).permitAll()
-        .requestMatchers("/actuator/health", "/error").permitAll()
+        .requestMatchers("/actuator/health", "/error", "/ws", "/ws/**").permitAll()
         .anyRequest().authenticated()
 );
         return http.build();
