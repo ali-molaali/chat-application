@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chat room</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #1d2733;
+            --muted: #64707d;
+            --paper: #f5f1e8;
+            --panel: #fffdf8;
+            --line: #d9d1c2;
+            --accent: #c94f35;
+            --accent-dark: #9f3826;
+            --success: #287c5b;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f1e8, #e8eee8);
+            color: var(--ink);
+            font: 16px/1.5 Georgia, "Times New Roman", serif;
+        }
+
+        main {
+            width: min(920px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 48px 0;
+        }
+
+        header { margin-bottom: 28px; }
+        h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4.5rem); line-height: 1; }
+        .intro { max-width: 560px; color: var(--muted); }
+
+        .panel {
+            background: color-mix(in srgb, var(--panel) 92%, transparent);
+            border: 1px solid var(--line);
+            box-shadow: 0 18px 50px #52615320;
+            padding: 24px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        label { display: grid; gap: 5px; color: var(--muted); font-size: .9rem; }
+        input, button { font: inherit; }
+        input {
+            width: 100%;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--ink);
+            padding: 10px 12px;
+        }
+
+        button {
+            border: 0;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+            padding: 11px 16px;
+        }
+        button:hover { background: var(--accent-dark); }
+        button:disabled { cursor: not-allowed; opacity: .5; }
+
+        #status { color: var(--muted); margin: 18px 0 0; }
+        #status.connected { color: var(--success); }
+
+        #messages {
+            display: grid;
+            gap: 10px;
+            min-height: 180px;
+            margin: 24px 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        #messages li {
+            border-left: 4px solid var(--accent);
+            background: #fff;
+            padding: 10px 14px;
+        }
+        .meta { color: var(--muted); font-size: .8rem; }
+
+        .send-form { display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+        .hint { color: var(--muted); font-size: .9rem; }
+
+        @media (max-width: 680px) {
+            main { padding: 28px 0; }
+            .controls, .send-form { grid-template-columns: 1fr; }
+            button { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p>LIVE CHAT / STOMP</p>
+        <h1>One room, many listeners.</h1>
+        <p class="intro">Connect to a room, then send a message through the REST API. Kafka carries it to the consumer, which broadcasts it back here.</p>
+    </header>
+
+    <section class="panel">
+        <div class="controls">
+            <label>Room
+                <input id="room" value="general" maxlength="100">
+            </label>
+            <label>Sender ID
+                <input id="senderId" type="number" value="1" min="1">
+            </label>
+            <button id="connect" type="button">Connect</button>
+        </div>
+        <p id="status">Disconnected</p>
+
+        <ul id="messages" aria-live="polite"></ul>
+
+        <form id="sendForm" class="send-form">
+            <input id="text" placeholder="Write a message" maxlength="2000" required>
+            <button id="send" type="submit" disabled>Send message</button>
+        </form>
+        <p class="hint">Messages appear here only after the Kafka consumer broadcasts them.</p>
+    </section>
+</main>
+
+<script>
+    const roomInput = document.querySelector("#room");
+    const senderInput = document.querySelector("#senderId");
+    const textInput = document.querySelector("#text");
+    const connectButton = document.querySelector("#connect");
+    const sendButton = document.querySelector("#send");
+    const status = document.querySelector("#status");
+    const messages = document.querySelector("#messages");
+    const contextPath = window.location.pathname.startsWith("/api/") ? "/api" : "";
+    let socket;
+    let connected = false;
+
+    function frame(command, headers = {}, body = "") {
+        const lines = [command];
+        Object.entries(headers).forEach(([key, value]) => lines.push(`${key}:${value}`));
+        return `${lines.join("\n")}\n\n${body}\0`;
+    }
+
+    function setConnected(value) {
+        connected = value;
+        sendButton.disabled = !value;
+        connectButton.textContent = value ? "Disconnect" : "Connect";
+        status.textContent = value ? `Connected to /topic/rooms/${roomInput.value}` : "Disconnected";
+        status.classList.toggle("connected", value);
+    }
+
+    function addMessage(event) {
+        const item = document.createElement("li");
+        item.innerHTML = `<strong></strong><br><span class="meta"></span>`;
+        item.querySelector("strong").textContent = event.text;
+        item.querySelector(".meta").textContent = `sender ${event.senderId} · ${event.sentAt}`;
+        messages.prepend(item);
+    }
+
+    function connect() {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        socket = new WebSocket(`${protocol}://${window.location.host}${contextPath}/ws`);
+
+        socket.onopen = () => {
+            socket.send(frame("CONNECT", {"accept-version": "1.2", "host": window.location.host}));
+        };
+
+        socket.onmessage = ({ data }) => {
+            data.split("\0").filter(Boolean).forEach(raw => {
+                const separator = raw.indexOf("\n\n");
+                const command = raw.slice(0, separator).split("\n")[0];
+                if (command === "CONNECTED") {
+                    socket.send(frame("SUBSCRIBE", {
+                        id: "room-subscription",
+                        destination: `/topic/rooms/${roomInput.value}`,
+                        ack: "auto"
+                    }));
+                    setConnected(true);
+                } else if (command === "MESSAGE") {
+                    addMessage(JSON.parse(raw.slice(separator + 2)));
+                }
+            });
+        };
+
+        socket.onclose = () => setConnected(false);
+        socket.onerror = () => { status.textContent = "Connection error"; };
+    }
+
+    connectButton.addEventListener("click", () => {
+        if (connected) {
+            socket.close();
+        } else {
+            connect();
+        }
+    });
+
+    document.querySelector("#sendForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        if (!connected) return;
+
+        const response = await fetch(`${contextPath}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                senderId: Number(senderInput.value),
+                roomId: roomInput.value,
+                text: textInput.value
+            })
+        });
+
+        if (!response.ok) {
+            status.textContent = `Send failed: ${response.status}`;
+            return;
+        }
+
+        textInput.value = "";
+    });
+</script>
+</body>
+</html>
